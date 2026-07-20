@@ -3,7 +3,8 @@ importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest');
 const MODEL_PATH = `yolov5n_web_model/model.json`;
 const LABELS_PATH = `yolov5n_web_model/labels.json`;
 const INPUT_MODEL_DIMENTIONS = 640
-const CLASS_THRESHOLD = 0.4
+const CLASS_THRESHOLD = 0.25
+const TARGET_LABELS = new Set(['bird', 'kite'])
 
 let _labels = []
 let _model = null
@@ -78,12 +79,14 @@ async function runInference(tensor) {
  * Uso de generator (function*):
  * - Permite enviar cada predição assim que processada, sem criar lista intermediária
  */
-function* processPrediction({ boxes, scores, classes }, width, height) {
+function processPrediction({ boxes, scores, classes }, width, height) {
+    let bestPrediction = null
+
     for (let index = 0; index < scores.length; index++) {
         if (scores[index] < CLASS_THRESHOLD) continue
 
         const label = _labels[classes[index]]
-        if (label !== 'kite') continue
+        if (!TARGET_LABELS.has(label)) continue
 
         let [x1, y1, x2, y2] = boxes.slice(index * 4, (index + 1) * 4)
         x1 *= width
@@ -95,14 +98,18 @@ function* processPrediction({ boxes, scores, classes }, width, height) {
         const boxHeight = y2 - y1
         const centerX = x1 + boxWidth / 2
         const centerY = y1 + boxHeight / 2
+        const score = scores[index]
 
-        yield {
-            x: centerX,
-            y: centerY,
-            score: (scores[index] * 100).toFixed(2)
+        if (!bestPrediction || score > bestPrediction.score) {
+            bestPrediction = {
+                x: centerX,
+                y: centerY,
+                score: (score * 100).toFixed(2)
+            }
         }
-
     }
+
+    return bestPrediction
 }
 
 loadModelAndLabels()
@@ -115,8 +122,9 @@ self.onmessage = async ({ data }) => {
     const { width, height } = data.image
 
     const inferenceResults = await runInference(input)
+    const prediction = processPrediction(inferenceResults, width, height)
 
-    for (const prediction of processPrediction(inferenceResults, width, height)) {
+    if (prediction) {
         postMessage({
             type: 'prediction',
             ...prediction

@@ -282,6 +282,14 @@ class Stage extends Container {
       y: clickPoint.y / this.scale.y
     };
   }
+
+  isPointNearAliveDuck(clickPoint, radius) {
+    const scaledClickPoint = this.getScaledClickLocation(clickPoint);
+    return this.ducks.some((duck) => {
+      return duck.alive && Utils.pointDistance(duck.position, scaledClickPoint) < radius;
+    });
+  }
+
   /**
    * flyAway
    * Helper method that causes the sky to change color and the ducks to fly away
